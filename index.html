@@ -3,189 +3,323 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ruuvi Bluetooth Web App</title>
+    <title>Ruuvi Bluetooth Web App (React)</title>
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Add Pico.css dark theme -->
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <style>
+        html, body {
+            background: #111;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        #root {
+            max-width: 420px;
+            margin: 3em auto 0 auto;
+            background: #181a1b;
+            border-radius: 1.2em;
+            box-shadow: 0 4px 32px #0008;
+            padding: 2.5em 2em 2em 2em;
+        }
+        button, input[type=range] {
+            margin-top: 0.5em;
+        }
+        ul#messages {
+            margin: 1.5em 0 1.5em 0;
+            padding: 0;
+            list-style: none;
+        }
+        ul#messages li {
+            background: #23272b;
+            border-radius: 0.7em;
+            padding: 1.1em 0.7em;
+            margin-bottom: 0.5em;
+            text-align: center;
+            color: #fff;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+        }
+        label {
+            font-size: 1.1em;
+        }
+        input[type=range] {
+            width: 60%;
+            accent-color: #4fd1c5;
+        }
+        .debug-controls {
+            background: #181a1b;
+            border-radius: 0.7em;
+            padding: 1.2em 1em 1em 1em;
+            margin-top: 1.5em;
+            box-shadow: 0 2px 8px #0004;
+        }
+        .debug-controls button {
+            margin-right: 0.7em;
+        }
+    </style>
 </head>
 <body>
-    <h1>RuuviTag BLE Demo</h1>
-    <button id="scan">Watch RuuviTag Advertisements / Notifications</button>
-    <ul id="messages"></ul>
-    <div style="margin:1em 0;">
-        <label>Debug Temperature (°C): <input type="range" id="debug-temp" min="20" max="120" step="0.1" value="20"> <span id="debug-temp-val">20</span>°C</label>
-        <br>
-        <label>Debug RH (%): <input type="range" id="debug-rh" min="0" max="100" step="0.1" value="50"> <span id="debug-rh-val">50</span>%</label>
-        <br>
-        <button id="debug-apply">Apply Debug Values</button>
-        <button id="debug-reset">Reset</button>
-    </div>
+    <div id="root"></div>
     <script>
-        // Ruuvi Data Format 5 decoder (binary, 24 bytes)
-        function decodeRuuviDF5(dataView) {
-            // DataView is expected to be 24 bytes, first byte is 0x05 (format)
-            if (!(dataView instanceof DataView) || dataView.byteLength !== 24 || dataView.getUint8(0) !== 0x05) return null;
-            try {
-                // Temperature (0.005 degC)
-                let tempRaw = dataView.getInt16(1, false);
-                const temperature = tempRaw === -32768 ? null : +(tempRaw / 200.0);
-
-                // Humidity (0.01%)
-                const humidityRaw = dataView.getUint16(3, false);
-                const humidity = humidityRaw === 0xFFFF ? null : +(humidityRaw / 400.0);
-
-                // Pressure (Pa, +50000)
-                const pressureRaw = dataView.getUint16(5, false);
-                const pressure = pressureRaw === 0xFFFF ? null : +((pressureRaw + 50000) / 100.0);
-
-                // Acceleration (mg)
-                let accX = dataView.getInt16(7, false);
-                let accY = dataView.getInt16(9, false);
-                let accZ = dataView.getInt16(11, false);
-                if (accX === -32768) accX = null;
-                if (accY === -32768) accY = null;
-                if (accZ === -32768) accZ = null;
-
-                // Power info
-                const powerInfo = dataView.getUint8(13);
-                const batteryVoltage = powerInfo >> 5;
-                const txPowerRaw = powerInfo & 0x1F;
-                const battery = batteryVoltage === 0b1111111 ? null : 1600 + batteryVoltage;
-                const txPower = txPowerRaw === 0b11111 ? null : -40 + (txPowerRaw * 2);
-
-                // Movement counter
-                const movement_counter = dataView.getUint8(15);
-
-                // Measurement sequence number
-                const measurement_sequence_number = dataView.getUint16(16, false);
-
-                // MAC address (bytes 18-23, big endian)
-                const mac = Array.from({length: 6}, (_, i) => dataView.getUint8(18 + i).toString(16).padStart(2, '0')).join(":");
-
-                return {
-                    humidity,
-                    temperature,
-                    pressure,
-                    acceleration_x: accX,
-                    acceleration_y: accY,
-                    acceleration_z: accZ,
-                    battery,
-                    txPower,
-                    movement_counter,
-                    measurement_sequence_number,
-                    mac
-                };
-            } catch (e) {
-                return null;
-            }
+    // Ruuvi Data Format 5 decoder (binary, 24 bytes)
+    function decodeRuuviDF5(dataView) {
+        if (!(dataView instanceof DataView) || dataView.byteLength !== 24 || dataView.getUint8(0) !== 0x05) return null;
+        try {
+            let tempRaw = dataView.getInt16(1, false);
+            const temperature = tempRaw === -32768 ? null : +(tempRaw / 200.0);
+            const humidityRaw = dataView.getUint16(3, false);
+            const humidity = humidityRaw === 0xFFFF ? null : +(humidityRaw / 400.0);
+            const pressureRaw = dataView.getUint16(5, false);
+            const pressure = pressureRaw === 0xFFFF ? null : +((pressureRaw + 50000) / 100.0);
+            let accX = dataView.getInt16(7, false);
+            let accY = dataView.getInt16(9, false);
+            let accZ = dataView.getInt16(11, false);
+            if (accX === -32768) accX = null;
+            if (accY === -32768) accY = null;
+            if (accZ === -32768) accZ = null;
+            const powerInfo = dataView.getUint8(13);
+            const batteryVoltage = powerInfo >> 5;
+            const txPowerRaw = powerInfo & 0x1F;
+            const battery = batteryVoltage === 0b1111111 ? null : 1600 + batteryVoltage;
+            const txPower = txPowerRaw === 0b11111 ? null : -40 + (txPowerRaw * 2);
+            const movement_counter = dataView.getUint8(15);
+            const measurement_sequence_number = dataView.getUint16(16, false);
+            const mac = Array.from({length: 6}, (_, i) => dataView.getUint8(18 + i).toString(16).padStart(2, '0')).join(":");
+            return {
+                humidity,
+                temperature,
+                pressure,
+                acceleration_x: accX,
+                acceleration_y: accY,
+                acceleration_z: accZ,
+                battery,
+                txPower,
+                movement_counter,
+                measurement_sequence_number,
+                mac
+            };
+        } catch (e) {
+            return null;
         }
+    }
+    function apparentTemperature(T, RH) {
+        if (T == null || RH == null) return null;
+        const e = (RH / 100) * 6.105 * Math.exp(17.27 * T / (237.7 + T));
+        const AT = T + 0.33 * e - 4.00;
+        return AT;
+    }
 
-        // Calculate Apparent Temperature (Steadman's formula, simplified)
-        function apparentTemperature(T, RH) {
-            if (T == null || RH == null) return null;
-            const e = (RH / 100) * 6.105 * Math.exp(17.27 * T / (237.7 + T));
-            const AT = T + 0.33 * e - 4.00;
-            return AT;
-        }
+    const { useState, useRef } = React;
 
-        let scanActive = false;
+    // --- Sensor Abstraction ---
+    function createRealSensor(onUpdate) {
         let bleScan = null;
-
-        let debugMode = false;
-        let debugTemp = 20;
-        let debugRH = 50;
-
-        // Unified render function for sensor display
-        function renderSensorDisplay({temperature, humidity, apparentTemperature, source}) {
-            const messagesList = document.getElementById('messages');
-            messagesList.innerHTML = '';
-            let t = temperature !== null && temperature !== undefined ? temperature.toFixed(1) : '?';
-            let rh = humidity !== null && humidity !== undefined ? humidity.toFixed(1) : '?';
-            let at = apparentTemperature !== null && apparentTemperature !== undefined ? apparentTemperature.toFixed(1) : '?';
-            messagesList.innerHTML =
-                `<li style="font-size:2em;">T: <b>${t}°C</b> | AT: <b>${at}°C</b> | RH: <b>${rh}%</b>${source ? ` <span style='font-size:0.5em;color:#888;'>(${source})</span>` : ''}</li>`;
-        }
-
-        async function startLEScan() {
-            const messagesList = document.getElementById('messages');
-            messagesList.innerHTML = '';
-            try {
-                bleScan = await navigator.bluetooth.requestLEScan({
-                    filters: [{namePrefix: "Ruuvi"}],
-                });
-                scanActive = true;
-                const advItem = document.createElement('li');
-                advItem.textContent = 'Scanning for advertisements... Move your RuuviTag nearby!';
-                messagesList.appendChild(advItem);
-                navigator.bluetooth.addEventListener('advertisementreceived', event => {
-                    if (debugMode) return;
-                    for (const [companyId, dataView] of event.manufacturerData) {
-                        if (companyId === 0x0499 && dataView.byteLength == 24) {
-                            const decoded = decodeRuuviDF5(dataView);
-                            if (decoded) {
-                                const at = apparentTemperature(decoded.temperature, decoded.humidity);
-                                renderSensorDisplay({
-                                    temperature: decoded.temperature,
-                                    humidity: decoded.humidity,
-                                    apparentTemperature: at,
-                                    source: 'BLE'
-                                });
+        let advListener = null;
+        return {
+            async start() {
+                try {
+                    bleScan = await navigator.bluetooth.requestLEScan({ filters: [{ namePrefix: "Ruuvi" }] });
+                    advListener = event => {
+                        for (const [companyId, dataView] of event.manufacturerData) {
+                            if (companyId === 0x0499 && dataView.byteLength === 24) {
+                                const decoded = decodeRuuviDF5(dataView);
+                                if (decoded) {
+                                    const at = apparentTemperature(decoded.temperature, decoded.humidity);
+                                    onUpdate({
+                                        temperature: decoded.temperature,
+                                        humidity: decoded.humidity,
+                                        apparentTemperature: at
+                                    });
+                                }
                             }
                         }
+                    };
+                    navigator.bluetooth.addEventListener('advertisementreceived', advListener);
+                } catch (error) {
+                    onUpdate({ temperature: null, humidity: null, apparentTemperature: null, error: error.toString() });
+                }
+            },
+            stop() {
+                if (bleScan) bleScan.stop();
+                if (advListener) navigator.bluetooth.removeEventListener('advertisementreceived', advListener);
+                bleScan = null;
+                advListener = null;
+            }
+        };
+    }
+    function createDebugSensor(onUpdate) {
+        let interval = null;
+        const BASELINE_RH = 5;
+        const BASELINE_TEMP = 80;
+        let trueTemp = BASELINE_TEMP, trueRH = BASELINE_RH, fakeTemp = BASELINE_TEMP, fakeRH = BASELINE_RH;
+        let running = false;
+        function fakeLoyly() {
+            trueRH = Math.min(trueRH + 10, 100);
+        }
+        return {
+            async start() {
+                running = true;
+                trueTemp = BASELINE_TEMP; trueRH = BASELINE_RH; fakeTemp = BASELINE_TEMP; fakeRH = BASELINE_RH;
+                onUpdate({ temperature: fakeTemp, humidity: fakeRH, apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
+                interval = setInterval(() => {
+                    // True env random walk
+                    trueTemp += (Math.random() * 2 - 1);
+                    //trueTemp = Math.max(60, Math.min(120, trueTemp));
+                    // Decay RH spike
+                    if (trueRH > BASELINE_RH) {
+                        trueRH -= Math.max((trueRH - BASELINE_RH) * 0.08, 0.05);
+                        if (trueRH < BASELINE_RH) trueRH = BASELINE_RH;
                     }
-                });
-            } catch (error) {
-                const errItem = document.createElement('li');
-                errItem.textContent = 'Error: ' + error;
-                messagesList.appendChild(errItem);
-            }
-        }
+                    // Exponential smoothing
+                    const tau = 2.0, dt = 1.0, alpha = 1 - Math.exp(-dt / tau);
+                    fakeTemp += alpha * (trueTemp - fakeTemp);
+                    fakeRH += alpha * (trueRH - fakeRH);
+                    onUpdate({ temperature: +fakeTemp.toFixed(2), humidity: +fakeRH.toFixed(2), apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
+                }, 1000);
+                this.fakeLoyly = fakeLoyly;
+            },
+            stop() {
+                running = false;
+                if (interval) clearInterval(interval);
+                interval = null;
+            },
+            fakeLoyly,
+            getBaselineRH: () => BASELINE_RH,
+            getBaselineTemp: () => BASELINE_TEMP
+        };
+    }
 
-        function stopLEScan() {
-            if (bleScan && scanActive) {
-                bleScan.stop();
-                scanActive = false;
-                const messagesList = document.getElementById('messages');
-                const stopItem = document.createElement('li');
-                stopItem.textContent = 'Scan stopped.';
-                messagesList.appendChild(stopItem);
-            }
-        }
-
-        document.getElementById('scan').addEventListener('click', () => {
-            if (!scanActive) {
-                startLEScan();
-                document.getElementById('scan').textContent = 'Stop Scan';
+    // --- UI ---
+    function RuuviApp() {
+        const [scanActive, setScanActive] = useState(false);
+        const [debugMode, setDebugMode] = useState(false);
+        const [sensor, setSensor] = useState({ temperature: null, humidity: null, apparentTemperature: null });
+        const [error, setError] = useState(null);
+        const sensorRef = useRef(null);
+        // Start/stop sensor
+        async function startSensor(isDebug) {
+            if (sensorRef.current) sensorRef.current.stop();
+            setSensor({ temperature: null, humidity: null, apparentTemperature: null });
+            setError(null);
+            let s;
+            if (isDebug) {
+                s = createDebugSensor(update => setSensor(update));
             } else {
-                stopLEScan();
-                document.getElementById('scan').textContent = 'Watch RuuviTag Advertisements / Notifications';
+                s = createRealSensor(update => {
+                    if (update.error) setError(update.error);
+                    else setSensor(update);
+                });
             }
-        });
-
-        // Update debug display values only (not the main sensor display)
-        document.getElementById('debug-temp').addEventListener('input', e => {
-            debugTemp = +e.target.value;
-            document.getElementById('debug-temp-val').textContent = debugTemp;
-        });
-
-        document.getElementById('debug-rh').addEventListener('input', e => {
-            debugRH = +e.target.value;
-            document.getElementById('debug-rh-val').textContent = debugRH;
-        });
-
-        // Debug slider event now sends a fake BLE event to the render function
-        document.getElementById('debug-apply').addEventListener('click', () => {
-            debugMode = true;
-            // Simulate a BLE event by calling the unified render function
-            renderSensorDisplay({
-                temperature: debugTemp,
-                humidity: debugRH,
-                apparentTemperature: apparentTemperature(debugTemp, debugRH),
-                source: 'Debug'
+            sensorRef.current = s;
+            await s.start();
+        }
+        function stopSensor() {
+            if (sensorRef.current) sensorRef.current.stop();
+            setSensor({ temperature: null, humidity: null, apparentTemperature: null });
+            setError(null);
+        }
+        // UI event handlers
+        function handleDebugStart() {
+            // No longer used: debug mode starts via fake löyly
+        }
+        function handleDebugStop() {
+            setDebugMode(false);
+            stopSensor();
+        }
+        function handleScanClick() {
+            setDebugMode(false);
+            setScanActive(v => {
+                if (!v) startSensor(false);
+                else stopSensor();
+                return !v;
             });
-        });
+        }
+        function handleFakeLoyly() {
+            if (!debugMode) {
+                setDebugMode(true);
+                setScanActive(false);
+                startSensor(true);
+            }
+            if (sensorRef.current && sensorRef.current.fakeLoyly) sensorRef.current.fakeLoyly();
+        }
+        // Clean up on unmount
+        React.useEffect(() => () => stopSensor(), []);
 
-        document.getElementById('debug-reset').addEventListener('click', () => {
-            debugMode = false;
-            document.getElementById('messages').innerHTML = '';
-        });
+        function getLoylyColor(val) {
+            let mintemp = 20;
+            let maxtemp = 150;  
+            let t = Math.max(mintemp, Math.min(maxtemp, Number(val)));
+            let norm = (t - mintemp) / (maxtemp - mintemp);
+            console.log(norm)
+            norm = 1 - norm;
+            norm = norm*norm;
+            let hue = (norm)*180;
+            
+            return "hsl(" + (hue) + ", 100%, 50%)";
+        }
+        // UI rendering
+        let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
+        let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
+        let at = sensor.apparentTemperature !== null && sensor.apparentTemperature !== undefined ? sensor.apparentTemperature.toFixed(1) : '?';
+        let loylyColor = (at !== '?') ? getLoylyColor(at) : '#fff';
+        return (
+            React.createElement('main', null,
+                React.createElement('div', {
+                    style: {
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em'
+                    }
+                },
+                    React.createElement('div', { style: { textAlign: 'center' } },
+                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Löyly'),
+                        React.createElement('div', {
+                            style: {
+                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: loylyColor, fontWeight: 600, lineHeight: 1.1,
+                                transition: 'color 0.3s'
+                            }
+                        }, `${at}°L`)
+                    ),
+                    React.createElement('div', { style: { textAlign: 'center' } },
+                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Temperature'),
+                        React.createElement('div', {
+                            style: {
+                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: '#fff', fontWeight: 600, lineHeight: 1.1
+                            }
+                        }, `${t}°C`)
+                    ),
+                    React.createElement('div', { style: { textAlign: 'center' } },
+                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Humidity'),
+                        React.createElement('div', {
+                            style: {
+                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: '#fff', fontWeight: 600, lineHeight: 1.1
+                            }
+                        }, `${rh}%`)
+                    ),
+                    error && React.createElement('div', { style: { color: '#f66', marginTop: '1em', fontSize: '1.1em' } }, error)
+                ),
+                React.createElement('section', { className: 'debug-controls', style: { marginTop: '2.5em', textAlign: 'center' } },
+                    React.createElement('button', {
+                        id: 'scan', onClick: handleScanClick,
+                        className: scanActive ? 'contrast' : '',
+                        style: { width: '100%', fontSize: '1.2em', marginTop: '2em' }
+                    }, scanActive ? 'Disconnect' : 'Connect'),
+                    React.createElement('div', {
+                        style: {
+                            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5em', marginTop: '2.5em', fontSize: '0.98em', color: '#7fd', opacity: 0.85
+                        }
+                    },
+                        React.createElement('a', {
+                            href: '#',
+                            style: { textDecoration: 'underline', color: '#7fd', cursor: 'pointer', fontSize: '0.98em' },
+                            onClick: e => { e.preventDefault(); handleFakeLoyly(); }
+                        }, 'Fake löyly'),
+                    )
+                )
+            )
+        );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(RuuviApp));
     </script>
 </body>
 </html>
