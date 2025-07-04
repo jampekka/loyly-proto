@@ -12,14 +12,14 @@
     <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
     <style>
         html, body {
-            background: #111;
-            color: #e0e0e0;
+            background: #000;
+            color: hsl(0, 0%, 70%);
             min-height: 100vh;
         }
         #root {
             max-width: 420px;
             margin: 3em auto 0 auto;
-            background: #181a1b;
+            background: #000;
             border-radius: 1.2em;
             box-shadow: 0 4px 32px #0008;
             padding: 2.5em 2em 2em 2em;
@@ -33,7 +33,6 @@
             list-style: none;
         }
         ul#messages li {
-            background: #23272b;
             border-radius: 0.7em;
             padding: 1.1em 0.7em;
             margin-bottom: 0.5em;
@@ -41,15 +40,32 @@
             color: #fff;
             font-family: 'Fira Mono', 'Consolas', monospace;
         }
-        label {
+        .loyly-label, .temp-label, .hum-label {
+            color: hsl(0, 0%, 50%);
+            font-size: 1.1em;
+            margin-bottom: 0.2em;
+            letter-spacing: 0.05em;
+        }
+        .loyly-value {
+            font-size: 4.0em;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            font-weight: 600;
+            line-height: 1.1;
+            transition: color 0.3s;
+        }
+        .temp-value, .hum-value {
+            font-size: 2.0em;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            font-weight: 600;
+            line-height: 1.1;
+            color: hsl(0, 0%, 90%);
+        }
+        .error-msg {
+            color: #f66;
+            margin-top: 1em;
             font-size: 1.1em;
         }
-        input[type=range] {
-            width: 60%;
-            accent-color: #4fd1c5;
-        }
         .debug-controls {
-            background: #181a1b;
             border-radius: 0.7em;
             padding: 1.2em 1em 1em 1em;
             margin-top: 1.5em;
@@ -57,6 +73,22 @@
         }
         .debug-controls button {
             margin-right: 0.7em;
+        }
+        .debug-links {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5em;
+            margin-top: 2.5em;
+            font-size: 0.98em;
+            color: #7fd;
+            opacity: 0.85;
+        }
+        .debug-links a {
+            text-decoration: underline;
+            color: #7fd;
+            cursor: pointer;
+            font-size: 0.98em;
         }
     </style>
 </head>
@@ -272,31 +304,21 @@
                     }
                 },
                     React.createElement('div', { style: { textAlign: 'center' } },
-                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Löyly'),
+                        React.createElement('div', { className: 'loyly-label' }, 'Löyly'),
                         React.createElement('div', {
-                            style: {
-                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: loylyColor, fontWeight: 600, lineHeight: 1.1,
-                                transition: 'color 0.3s'
-                            }
+                            className: 'loyly-value',
+                            style: { color: loylyColor }
                         }, `${at}°L`)
                     ),
                     React.createElement('div', { style: { textAlign: 'center' } },
-                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Temperature'),
-                        React.createElement('div', {
-                            style: {
-                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: '#fff', fontWeight: 600, lineHeight: 1.1
-                            }
-                        }, `${t}°C`)
+                        React.createElement('div', { className: 'temp-label' }, 'Temperature'),
+                        React.createElement('div', { className: 'temp-value' }, `${t}°C`)
                     ),
                     React.createElement('div', { style: { textAlign: 'center' } },
-                        React.createElement('div', { style: { color: '#aaa', fontSize: '1.1em', marginBottom: '0.2em', letterSpacing: '0.05em' } }, 'Humidity'),
-                        React.createElement('div', {
-                            style: {
-                                fontSize: '3.2em', fontFamily: 'Fira Mono, Consolas, monospace', color: '#fff', fontWeight: 600, lineHeight: 1.1
-                            }
-                        }, `${rh}%`)
+                        React.createElement('div', { className: 'hum-label' }, 'Humidity'),
+                        React.createElement('div', { className: 'hum-value' }, `${rh}%`)
                     ),
-                    error && React.createElement('div', { style: { color: '#f66', marginTop: '1em', fontSize: '1.1em' } }, error)
+                    error && React.createElement('div', { className: 'error-msg' }, error)
                 ),
                 React.createElement('section', { className: 'debug-controls', style: { marginTop: '2.5em', textAlign: 'center' } },
                     React.createElement('button', {
@@ -304,14 +326,9 @@
                         className: scanActive ? 'contrast' : '',
                         style: { width: '100%', fontSize: '1.2em', marginTop: '2em' }
                     }, scanActive ? 'Disconnect' : 'Connect'),
-                    React.createElement('div', {
-                        style: {
-                            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5em', marginTop: '2.5em', fontSize: '0.98em', color: '#7fd', opacity: 0.85
-                        }
-                    },
+                    React.createElement('div', { className: 'debug-links' },
                         React.createElement('a', {
                             href: '#',
-                            style: { textDecoration: 'underline', color: '#7fd', cursor: 'pointer', fontSize: '0.98em' },
                             onClick: e => { e.preventDefault(); handleFakeLoyly(); }
                         }, 'Fake löyly'),
                     )
