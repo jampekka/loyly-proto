@@ -9,6 +9,14 @@
     <h1>RuuviTag BLE Demo</h1>
     <button id="scan">Watch RuuviTag Advertisements / Notifications</button>
     <ul id="messages"></ul>
+    <div style="margin:1em 0;">
+        <label>Debug Temperature (°C): <input type="range" id="debug-temp" min="20" max="120" step="0.1" value="20"> <span id="debug-temp-val">20</span>°C</label>
+        <br>
+        <label>Debug RH (%): <input type="range" id="debug-rh" min="0" max="100" step="0.1" value="50"> <span id="debug-rh-val">50</span>%</label>
+        <br>
+        <button id="debug-apply">Apply Debug Values</button>
+        <button id="debug-reset">Reset</button>
+    </div>
     <script>
         // Ruuvi Data Format 5 decoder (binary, 24 bytes)
         function decodeRuuviDF5(dataView) {
@@ -69,8 +77,31 @@
             }
         }
 
+        // Calculate Apparent Temperature (Steadman's formula, simplified)
+        function apparentTemperature(T, RH) {
+            if (T == null || RH == null) return null;
+            const e = (RH / 100) * 6.105 * Math.exp(17.27 * T / (237.7 + T));
+            const AT = T + 0.33 * e - 4.00;
+            return AT;
+        }
+
         let scanActive = false;
         let bleScan = null;
+
+        let debugMode = false;
+        let debugTemp = 20;
+        let debugRH = 50;
+
+        // Unified render function for sensor display
+        function renderSensorDisplay({temperature, humidity, apparentTemperature, source}) {
+            const messagesList = document.getElementById('messages');
+            messagesList.innerHTML = '';
+            let t = temperature !== null && temperature !== undefined ? temperature.toFixed(1) : '?';
+            let rh = humidity !== null && humidity !== undefined ? humidity.toFixed(1) : '?';
+            let at = apparentTemperature !== null && apparentTemperature !== undefined ? apparentTemperature.toFixed(1) : '?';
+            messagesList.innerHTML =
+                `<li style="font-size:2em;">T: <b>${t}°C</b> | AT: <b>${at}°C</b> | RH: <b>${rh}%</b>${source ? ` <span style='font-size:0.5em;color:#888;'>(${source})</span>` : ''}</li>`;
+        }
 
         async function startLEScan() {
             const messagesList = document.getElementById('messages');
@@ -84,20 +115,19 @@
                 advItem.textContent = 'Scanning for advertisements... Move your RuuviTag nearby!';
                 messagesList.appendChild(advItem);
                 navigator.bluetooth.addEventListener('advertisementreceived', event => {
-                    // Ruuvi company ID is 0x0499
+                    if (debugMode) return;
                     for (const [companyId, dataView] of event.manufacturerData) {
-                        console.log(dataView);
                         if (companyId === 0x0499 && dataView.byteLength == 24) {
-                            //const decoded = decodeRuuviDF5(new DataView(dataView.buffer, dataView.byteOffset, dataView.byteLength));
                             const decoded = decodeRuuviDF5(dataView);
-                            const listItem = document.createElement('li');
                             if (decoded) {
-                                console.log(decoded);
-                                listItem.textContent = `[ADV] T=${decoded.temperature}°C, H=${decoded.humidity}%, P=${decoded.pressure}hPa, Acc=(${decoded.acceleration_x},${decoded.acceleration_y},${decoded.acceleration_z})mg, Bat=${decoded.battery}mV, Seq=${decoded.measurement_sequence_number}`;
-                            } else {
-                                listItem.textContent = '[ADV] Raw: ' + Array.from(new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength)).map(b => b.toString(16).padStart(2, '0')).join('');
+                                const at = apparentTemperature(decoded.temperature, decoded.humidity);
+                                renderSensorDisplay({
+                                    temperature: decoded.temperature,
+                                    humidity: decoded.humidity,
+                                    apparentTemperature: at,
+                                    source: 'BLE'
+                                });
                             }
-                            messagesList.appendChild(listItem);
                         }
                     }
                 });
@@ -127,6 +157,34 @@
                 stopLEScan();
                 document.getElementById('scan').textContent = 'Watch RuuviTag Advertisements / Notifications';
             }
+        });
+
+        // Update debug display values only (not the main sensor display)
+        document.getElementById('debug-temp').addEventListener('input', e => {
+            debugTemp = +e.target.value;
+            document.getElementById('debug-temp-val').textContent = debugTemp;
+        });
+
+        document.getElementById('debug-rh').addEventListener('input', e => {
+            debugRH = +e.target.value;
+            document.getElementById('debug-rh-val').textContent = debugRH;
+        });
+
+        // Debug slider event now sends a fake BLE event to the render function
+        document.getElementById('debug-apply').addEventListener('click', () => {
+            debugMode = true;
+            // Simulate a BLE event by calling the unified render function
+            renderSensorDisplay({
+                temperature: debugTemp,
+                humidity: debugRH,
+                apparentTemperature: apparentTemperature(debugTemp, debugRH),
+                source: 'Debug'
+            });
+        });
+
+        document.getElementById('debug-reset').addEventListener('click', () => {
+            debugMode = false;
+            document.getElementById('messages').innerHTML = '';
         });
     </script>
 </body>
