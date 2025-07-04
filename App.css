@@ -1,0 +1,81 @@
+@import url('https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css');
+
+html, body {
+    background: #000;
+    color: hsl(0, 0%, 70%);
+    min-height: 100vh;
+}
+#root {
+    max-width: 420px;
+    margin: 3em auto 0 auto;
+    background: #000;
+    border-radius: 1.2em;
+    box-shadow: 0 4px 32px #0008;
+    padding: 2.5em 2em 2em 2em;
+}
+button, input[type=range] {
+    margin-top: 0.5em;
+}
+ul#messages {
+    margin: 1.5em 0 1.5em 0;
+    padding: 0;
+    list-style: none;
+}
+ul#messages li {
+    border-radius: 0.7em;
+    padding: 1.1em 0.7em;
+    margin-bottom: 0.5em;
+    text-align: center;
+    color: #fff;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+}
+.loyly-label, .temp-label, .hum-label {
+    color: hsl(0, 0%, 50%);
+    font-size: 1.1em;
+    margin-bottom: 0.2em;
+    letter-spacing: 0.05em;
+}
+.loyly-value {
+    font-size: 4.0em;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    font-weight: 600;
+    line-height: 1.1;
+    transition: color 0.3s;
+}
+.temp-value, .hum-value {
+    font-size: 2.0em;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    font-weight: 600;
+    line-height: 1.1;
+    color: hsl(0, 0%, 90%);
+}
+.error-msg {
+    color: #f66;
+    margin-top: 1em;
+    font-size: 1.1em;
+}
+.debug-controls {
+    border-radius: 0.7em;
+    padding: 1.2em 1em 1em 1em;
+    margin-top: 1.5em;
+    box-shadow: 0 2px 8px #0004;
+}
+.debug-controls button {
+    margin-right: 0.7em;
+}
+.debug-links {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5em;
+    margin-top: 2.5em;
+    font-size: 0.98em;
+    color: #7fd;
+    opacity: 0.85;
+}
+.debug-links a {
+    text-decoration: underline;
+    color: #7fd;
+    cursor: pointer;
+    font-size: 0.98em;
+}
