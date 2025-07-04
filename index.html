@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruuvi Bluetooth Web App</title>
+</head>
+<body>
+    <h1>RuuviTag BLE Demo</h1>
+    <button id="scan">Watch RuuviTag Advertisements / Notifications</button>
+    <ul id="messages"></ul>
+    <script>
+        // Ruuvi Data Format 5 decoder (binary, 24 bytes)
+        function decodeRuuviDF5(dataView) {
+            // DataView is expected to be 24 bytes, first byte is 0x05 (format)
+            if (!(dataView instanceof DataView) || dataView.byteLength !== 24 || dataView.getUint8(0) !== 0x05) return null;
+            try {
+                // Temperature (0.005 degC)
+                let tempRaw = dataView.getInt16(1, false);
+                const temperature = tempRaw === -32768 ? null : +(tempRaw / 200.0);
+
+                // Humidity (0.01%)
+                const humidityRaw = dataView.getUint16(3, false);
+                const humidity = humidityRaw === 0xFFFF ? null : +(humidityRaw / 400.0);
+
+                // Pressure (Pa, +50000)
+                const pressureRaw = dataView.getUint16(5, false);
+                const pressure = pressureRaw === 0xFFFF ? null : +((pressureRaw + 50000) / 100.0);
+
+                // Acceleration (mg)
+                let accX = dataView.getInt16(7, false);
+                let accY = dataView.getInt16(9, false);
+                let accZ = dataView.getInt16(11, false);
+                if (accX === -32768) accX = null;
+                if (accY === -32768) accY = null;
+                if (accZ === -32768) accZ = null;
+
+                // Power info
+                const powerInfo = dataView.getUint8(13);
+                const batteryVoltage = powerInfo >> 5;
+                const txPowerRaw = powerInfo & 0x1F;
+                const battery = batteryVoltage === 0b1111111 ? null : 1600 + batteryVoltage;
+                const txPower = txPowerRaw === 0b11111 ? null : -40 + (txPowerRaw * 2);
+
+                // Movement counter
+                const movement_counter = dataView.getUint8(15);
+
+                // Measurement sequence number
+                const measurement_sequence_number = dataView.getUint16(16, false);
+
+                // MAC address (bytes 18-23, big endian)
+                const mac = Array.from({length: 6}, (_, i) => dataView.getUint8(18 + i).toString(16).padStart(2, '0')).join(":");
+
+                return {
+                    humidity,
+                    temperature,
+                    pressure,
+                    acceleration_x: accX,
+                    acceleration_y: accY,
+                    acceleration_z: accZ,
+                    battery,
+                    txPower,
+                    movement_counter,
+                    measurement_sequence_number,
+                    mac
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        let scanActive = false;
+        let bleScan = null;
+
+        async function startLEScan() {
+            const messagesList = document.getElementById('messages');
+            messagesList.innerHTML = '';
+            try {
+                bleScan = await navigator.bluetooth.requestLEScan({
+                    filters: [{namePrefix: "Ruuvi"}],
+                });
+                scanActive = true;
+                const advItem = document.createElement('li');
+                advItem.textContent = 'Scanning for advertisements... Move your RuuviTag nearby!';
+                messagesList.appendChild(advItem);
+                navigator.bluetooth.addEventListener('advertisementreceived', event => {
+                    // Ruuvi company ID is 0x0499
+                    for (const [companyId, dataView] of event.manufacturerData) {
+                        console.log(dataView);
+                        if (companyId === 0x0499 && dataView.byteLength == 24) {
+                            //const decoded = decodeRuuviDF5(new DataView(dataView.buffer, dataView.byteOffset, dataView.byteLength));
+                            const decoded = decodeRuuviDF5(dataView);
+                            const listItem = document.createElement('li');
+                            if (decoded) {
+                                console.log(decoded);
+                                listItem.textContent = `[ADV] T=${decoded.temperature}°C, H=${decoded.humidity}%, P=${decoded.pressure}hPa, Acc=(${decoded.acceleration_x},${decoded.acceleration_y},${decoded.acceleration_z})mg, Bat=${decoded.battery}mV, Seq=${decoded.measurement_sequence_number}`;
+                            } else {
+                                listItem.textContent = '[ADV] Raw: ' + Array.from(new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength)).map(b => b.toString(16).padStart(2, '0')).join('');
+                            }
+                            messagesList.appendChild(listItem);
+                        }
+                    }
+                });
+            } catch (error) {
+                const errItem = document.createElement('li');
+                errItem.textContent = 'Error: ' + error;
+                messagesList.appendChild(errItem);
+            }
+        }
+
+        function stopLEScan() {
+            if (bleScan && scanActive) {
+                bleScan.stop();
+                scanActive = false;
+                const messagesList = document.getElementById('messages');
+                const stopItem = document.createElement('li');
+                stopItem.textContent = 'Scan stopped.';
+                messagesList.appendChild(stopItem);
+            }
+        }
+
+        document.getElementById('scan').addEventListener('click', () => {
+            if (!scanActive) {
+                startLEScan();
+                document.getElementById('scan').textContent = 'Stop Scan';
+            } else {
+                stopLEScan();
+                document.getElementById('scan').textContent = 'Watch RuuviTag Advertisements / Notifications';
+            }
+        });
+    </script>
+</body>
+</html>
