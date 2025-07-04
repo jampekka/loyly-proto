@@ -6,7 +6,7 @@ html, body {
     min-height: 100vh;
 }
 #root {
-    max-width: 420px;
+    /*max-width: 420px;*/
     margin: 3em auto 0 auto;
     background: #000;
     border-radius: 1.2em;

@@ -138,11 +138,70 @@ function getLoylyColor(val) {
     return `hsl(${hue}, 100%, 50%)`;
 }
 
+function TimeSeriesChart({ data }) {
+    const ref = useRef();
+    const [width, setWidth] = useState(0);
+    useEffect(() => {
+        if (!ref.current) return;
+        const parent = ref.current.parentElement;
+        if (!parent) return;
+        setWidth(parent.offsetWidth);
+        const observer = new window.ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.contentRect) {
+                    setWidth(entry.contentRect.width);
+                }
+            }
+        });
+        observer.observe(parent);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        if (!ref.current || width === 0) return;
+        const height = Math.round(width * 0.5); // 50% aspect ratio
+        const margin = { top: 10, right: 10, bottom: 24, left: 36 };
+        const svg = d3.select(ref.current);
+        svg.selectAll("*").remove();
+        svg.attr("width", width).attr("height", height);
+        if (!data.length) return;
+        const x = d3.scaleLinear()
+            .domain([0, Math.max(30, data.length - 1)])
+            .range([margin.left, width - margin.right]);
+        const y = d3.scaleLinear()
+            .domain([d3.min(data, d => d.value) - 2, d3.max(data, d => d.value) + 2])
+            .range([height - margin.bottom, margin.top]);
+        const line = d3.line()
+            .x((d, i) => x(i))
+            .y(d => y(d.value));
+        svg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "#7fd")
+            .attr("stroke-width", 2)
+            .attr("d", line);
+        // X axis
+        svg.append("g")
+            .attr("transform", `translate(0,${height - margin.bottom})`)
+            .call(d3.axisBottom(x).ticks(6).tickFormat(i => `${data.length - i}s ago`))
+            .selectAll("text").attr("fill", "#aaa").attr("font-size", "0.8em");
+        // Y axis
+        svg.append("g")
+            .attr("transform", `translate(${margin.left},0)`)
+            .call(d3.axisLeft(y).ticks(5))
+            .selectAll("text").attr("fill", "#aaa").attr("font-size", "0.8em");
+        svg.selectAll(".domain, .tick line").attr("stroke", "#444");
+    }, [data, width]);
+
+    return <svg ref={ref} style={{ width: "100%", height: "auto", display: "block" }} />;
+}
+
 export default function RuuviApp() {
     const [scanActive, setScanActive] = useState(false);
     const [debugMode, setDebugMode] = useState(false);
     const [sensor, setSensor] = useState({ temperature: null, humidity: null, apparentTemperature: null });
     const [error, setError] = useState(null);
+    const [history, setHistory] = useState([]);
     const sensorRef = useRef(null);
     // Start/stop sensor
     async function startSensor(isDebug) {
@@ -190,24 +249,40 @@ export default function RuuviApp() {
     // Clean up on unmount
     useEffect(() => () => stopSensor(), []);
 
+    // Update history when apparentTemperature changes
+    useEffect(() => {
+        if (sensor.apparentTemperature !== null && !isNaN(sensor.apparentTemperature)) {
+            setHistory(h => {
+                const arr = [...h, { value: sensor.apparentTemperature }];
+                return arr.length > 30 ? arr.slice(arr.length - 30) : arr;
+            });
+        }
+    }, [sensor.apparentTemperature]);
+
     let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
     let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
     let at = sensor.apparentTemperature !== null && sensor.apparentTemperature !== undefined ? sensor.apparentTemperature.toFixed(1) : '?';
     let loylyColor = (at !== '?') ? getLoylyColor(at) : '#fff';
     return (
-        <main>
+        <main style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em' }}>
                 <div style={{ textAlign: 'center' }}>
                     <div className="loyly-label">Löyly</div>
                     <div className="loyly-value" style={{ color: loylyColor }}>{`${at}°L`}</div>
+
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div className="temp-label">Temperature</div>
-                    <div className="temp-value">{`${t}°C`}</div>
+                <div style={{ width: "100%", margin: "1.2em auto 0 auto" }}>
+                        <TimeSeriesChart data={history} />
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div className="hum-label">Humidity</div>
-                    <div className="hum-value">{`${rh}%`}</div>
+                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2.5em', width: '100%' }}>
+                    <div style={{ textAlign: 'center', flex: 1 }}>
+                        <div className="temp-label">Temperature</div>
+                        <div className="temp-value">{`${t}°C`}</div>
+                    </div>
+                    <div style={{ textAlign: 'center', flex: 1 }}>
+                        <div className="hum-label">Humidity</div>
+                        <div className="hum-value">{`${rh}%`}</div>
+                    </div>
                 </div>
                 {error && <div className="error-msg">{error}</div>}
             </div>
