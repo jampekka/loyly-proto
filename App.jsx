@@ -238,12 +238,15 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         // X axis
         svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
-            .call(d3.axisBottom(x).ticks(6).tickFormat(ms => `${Math.round(ms / 1000)}s ago`))
+            .call(d3.axisBottom(x)
+                .tickValues(Array.from({length: Math.floor(windowMs / 60000) + 1}, (_, i) => i * 60000))
+                .tickFormat(ms => `${Math.round(ms / 60000)}`)
+            )
             .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
-        // Y axis
+        // Y axis (move to right)
         svg.append('g')
-            .attr('transform', `translate(${margin.left},0)`)
-            .call(d3.axisLeft(y).ticks(5))
+            .attr('transform', `translate(${width - margin.right},0)`)
+            .call(d3.axisRight(y).ticks(5))
             .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
         svg.selectAll('.domain, .tick line').attr('stroke', '#444');
     }, [data, width, windowMs]);
