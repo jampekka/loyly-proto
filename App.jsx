@@ -172,10 +172,19 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
         const minTs = filtered[0].ts;
         const maxTs = filtered[filtered.length - 1].ts;
         const x = d3.scaleLinear()
-            .domain([0, windowMs])
-            .range([width - margin.right, margin.left]); // Reverse direction: newest right
+            .domain([0, windowMs]) // 0s on the right
+            .range([width - margin.right, margin.left]); // Newest right
         const y = d3.scaleLinear()
-            .domain([d3.min(filtered, d => d.value) - 2, d3.max(filtered, d => d.value) + 2])
+            .domain([
+                Math.min(
+                    d3.min(filtered, d => d.value),
+                    d3.min(filtered, d => d.temperature)
+                ) - 2,
+                Math.max(
+                    d3.max(filtered, d => d.value),
+                    d3.max(filtered, d => d.temperature)
+                ) + 2
+            ])
             .range([height - margin.bottom, margin.top]);
         // Area path
         const areaPath = d3.area()
@@ -207,13 +216,10 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
         }
         // --- Add temperature line ---
         if (filtered[0] && filtered[0].temperature !== undefined) {
-            const tempY = d3.scaleLinear()
-                .domain([d3.min(filtered, d => d.temperature) - 2, d3.max(filtered, d => d.temperature) + 2])
-                .range([height - margin.bottom, margin.top]);
             const tempLine = d3.line()
                 .defined(d => d.temperature !== null && !isNaN(d.temperature))
                 .x(d => x(now - d.ts))
-                .y(d => tempY(d.temperature));
+                .y(d => y(d.temperature));
             svg.append('path')
                 .datum(filtered)
                 .attr('d', tempLine)
@@ -225,7 +231,7 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
         // X axis
         svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
-            .call(d3.axisBottom(x).ticks(6).tickFormat(ms => `${Math.round((windowMs - ms) / 1000)}s ago`))
+            .call(d3.axisBottom(x).ticks(6).tickFormat(ms => `${Math.round(ms / 1000)}s ago`))
             .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
         // Y axis
         svg.append('g')
