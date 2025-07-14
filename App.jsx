@@ -138,7 +138,9 @@ function getLoylyColor(val) {
     return `hsl(${hue}, 100%, 50%)`;
 }
 
-function TimeSeriesChart({ data, windowMs = 5 * 60 * 1000 }) {
+const WINDOW_MS = 5 * 60 * 1000;
+
+function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
     useEffect(() => {
@@ -327,7 +329,6 @@ export default function RuuviApp() {
             const now = Date.now();
             const arr = [...h, { value: sensor.apparentTemperature, temperature: sensor.temperature, ts: now }];
             // Keep only the last WINDOW_MS milliseconds
-            const WINDOW_MS = 2 * 60 * 1000; // 2 minutes
             return arr.filter(d => now - d.ts <= WINDOW_MS);
         });
     }, [sensor]);
