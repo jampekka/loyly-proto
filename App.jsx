@@ -138,7 +138,7 @@ function getLoylyColor(val) {
     return `hsl(${hue}, 100%, 50%)`;
 }
 
-function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
+function TimeSeriesChart({ data, windowMs = 5 * 60 * 1000 }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
     useEffect(() => {
