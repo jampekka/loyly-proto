@@ -1,0 +1,1 @@
+const e="fallback-cache";self.addEventListener("fetch",c=>{c.respondWith(t(c.request))});async function t(c){try{const a=await fetch(c);return(await caches.open(e)).put(c,a.clone()),a}catch{return await caches.match(c)}}
