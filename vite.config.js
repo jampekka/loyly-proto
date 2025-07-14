@@ -14,8 +14,9 @@ const rollupOptions = {
 
 export default defineConfig({
   plugins: [react()],
+  base: './',
   build: {
-    outDir: 'docs',
+    outDir: './docs',
     emptyOutDir: true,
     rollupOptions
   },
