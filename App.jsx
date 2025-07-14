@@ -221,6 +221,7 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
     return <svg ref={ref} style={{ width: "100%", height: "auto", display: "block" }} />;
 }
 
+let wakeLock = null;
 export default function RuuviApp() {
     const [scanActive, setScanActive] = useState(false);
     const [debugMode, setDebugMode] = useState(false);
@@ -255,13 +256,28 @@ export default function RuuviApp() {
         setDebugMode(false);
         stopSensor();
     }
-    function handleScanClick() {
+    async function handleScanClick() {
         setDebugMode(false);
         setScanActive(v => {
             if (!v) startSensor(false);
             else stopSensor();
             return !v;
         });
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.debug("Wake lock", wakeLock)
+        } catch (err) {
+            console.error("Error getting screen wake lock")
+        }
+        const elem = document.documentElement; // or any element
+        if (elem.requestFullscreen) {
+            await elem.requestFullscreen();
+            console.log('Entered fullscreen');
+        } else {
+            console.warn('Fullscreen API not supported');
+        }
+
+        
     }
     function handleFakeLoyly() {
         if (!debugMode) {
