@@ -161,7 +161,12 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
         if (!ref.current || width === 0) return;
         // Only plot data within the window
         const now = Date.now();
-        const filtered = data.filter(d => now - d.ts <= windowMs);
+        let filtered = data.filter(d => now - d.ts <= windowMs);
+        // Remove garbage samples: both value and temperature null/NaN
+        filtered = filtered.filter(d => (
+            (d.value !== null && !isNaN(d.value)) ||
+            (d.temperature !== null && !isNaN(d.temperature))
+        ));
         if (!filtered.length) return;
         const height = Math.round(width * 0.5); // 50% aspect ratio
         const margin = { top: 10, right: 10, bottom: 24, left: 36 };
