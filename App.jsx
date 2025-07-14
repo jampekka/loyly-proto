@@ -205,6 +205,23 @@ function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
                 .attr('stroke-width', 2)
                 .attr('fill', 'none');
         }
+        // --- Add temperature line ---
+        if (filtered[0] && filtered[0].temperature !== undefined) {
+            const tempY = d3.scaleLinear()
+                .domain([d3.min(filtered, d => d.temperature) - 2, d3.max(filtered, d => d.temperature) + 2])
+                .range([height - margin.bottom, margin.top]);
+            const tempLine = d3.line()
+                .defined(d => d.temperature !== null && !isNaN(d.temperature))
+                .x(d => x(now - d.ts))
+                .y(d => tempY(d.temperature));
+            svg.append('path')
+                .datum(filtered)
+                .attr('d', tempLine)
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 2)
+                .attr('fill', 'none');
+        }
+        // --- End temperature line ---
         // X axis
         svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
@@ -297,7 +314,7 @@ export default function RuuviApp() {
         // Always run on every update, not just when value changes
         setHistory(h => {
             const now = Date.now();
-            const arr = [...h, { value: sensor.apparentTemperature, ts: now }];
+            const arr = [...h, { value: sensor.apparentTemperature, temperature: sensor.temperature, ts: now }];
             // Keep only the last WINDOW_MS milliseconds
             const WINDOW_MS = 2 * 60 * 1000; // 2 minutes
             return arr.filter(d => now - d.ts <= WINDOW_MS);
