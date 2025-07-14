@@ -171,7 +171,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         ));
         if (!filtered.length) return;
         const height = Math.round(width * 0.5); // 50% aspect ratio
-        const margin = { top: 10, right: 10, bottom: 24, left: 36 };
+        const margin = { top: 10, right: 36, bottom: 24, left: 10 };
         const svg = d3.select(ref.current);
         svg.selectAll("*").remove();
         svg.attr("width", width).attr("height", height);
@@ -242,12 +242,12 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
                 .tickValues(Array.from({length: Math.floor(windowMs / 60000) + 1}, (_, i) => i * 60000))
                 .tickFormat(ms => `${Math.round(ms / 60000)}`)
             )
-            .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
+            .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
         // Y axis (move to right)
         svg.append('g')
             .attr('transform', `translate(${width - margin.right},0)`)
             .call(d3.axisRight(y).ticks(5))
-            .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
+            .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
         svg.selectAll('.domain, .tick line').attr('stroke', '#444');
     }, [data, width, windowMs]);
 
