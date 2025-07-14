@@ -88,7 +88,7 @@ function createRealSensor(onUpdate) {
 function createDebugSensor(onUpdate) {
     let interval = null;
     const BASELINE_RH = 5;
-    const BASELINE_TEMP = 80;
+    const BASELINE_TEMP = 60;
     let trueTemp = BASELINE_TEMP, trueRH = BASELINE_RH, fakeTemp = BASELINE_TEMP, fakeRH = BASELINE_RH;
     let running = false;
     function fakeLoyly() {
@@ -101,7 +101,7 @@ function createDebugSensor(onUpdate) {
             onUpdate({ temperature: fakeTemp, humidity: fakeRH, apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
             interval = setInterval(() => {
                 // True env random walk
-                trueTemp += (Math.random() * 2 - 1);
+                //trueTemp += (Math.random() * 2 - 1);
                 //trueTemp = Math.max(60, Math.min(120, trueTemp));
                 // Decay RH spike
                 if (trueRH > BASELINE_RH) {
@@ -112,7 +112,7 @@ function createDebugSensor(onUpdate) {
                 const tau = 2.0, dt = 1.0, alpha = 1 - Math.exp(-dt / tau);
                 fakeTemp += alpha * (trueTemp - fakeTemp);
                 fakeRH += alpha * (trueRH - fakeRH);
-                onUpdate({ temperature: +fakeTemp.toFixed(2), humidity: +fakeRH.toFixed(2), apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
+                onUpdate({ temperature: fakeTemp, humidity: fakeRH, apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
             }, 1000);
             this.fakeLoyly = fakeLoyly;
         },
@@ -138,7 +138,7 @@ function getLoylyColor(val) {
     return `hsl(${hue}, 100%, 50%)`;
 }
 
-function TimeSeriesChart({ data }) {
+function TimeSeriesChart({ data, windowMs = 2 * 60 * 1000 }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
     useEffect(() => {
@@ -159,39 +159,64 @@ function TimeSeriesChart({ data }) {
 
     useEffect(() => {
         if (!ref.current || width === 0) return;
+        // Only plot data within the window
+        const now = Date.now();
+        const filtered = data.filter(d => now - d.ts <= windowMs);
+        if (!filtered.length) return;
         const height = Math.round(width * 0.5); // 50% aspect ratio
         const margin = { top: 10, right: 10, bottom: 24, left: 36 };
         const svg = d3.select(ref.current);
         svg.selectAll("*").remove();
         svg.attr("width", width).attr("height", height);
-        if (!data.length) return;
+        // X scale: time axis
+        const minTs = filtered[0].ts;
+        const maxTs = filtered[filtered.length - 1].ts;
         const x = d3.scaleLinear()
-            .domain([0, Math.max(30, data.length - 1)])
-            .range([margin.left, width - margin.right]);
+            .domain([0, windowMs])
+            .range([width - margin.right, margin.left]); // Reverse direction: newest right
         const y = d3.scaleLinear()
-            .domain([d3.min(data, d => d.value) - 2, d3.max(data, d => d.value) + 2])
+            .domain([d3.min(filtered, d => d.value) - 2, d3.max(filtered, d => d.value) + 2])
             .range([height - margin.bottom, margin.top]);
-        const line = d3.line()
-            .x((d, i) => x(i))
-            .y(d => y(d.value));
-        svg.append("path")
-            .datum(data)
-            .attr("fill", "none")
-            .attr("stroke", "#7fd")
-            .attr("stroke-width", 2)
-            .attr("d", line);
+        // Area path
+        const areaPath = d3.area()
+            .defined(d => d.value !== null && !isNaN(d.value)) // allow flat lines
+            .x(d => x(now - d.ts))
+            .y0(height - margin.bottom)
+            .y1(d => y(d.value));
+        
+        // Draw area fill (ensure always drawn, even if flat)
+        svg.append('path')
+            .datum(filtered)
+            .attr('d', areaPath)
+            .attr('fill', '#222') // fallback fill, replace with gradient if needed
+            .attr('stroke', 'none');
+        // Colored line segments
+        for (let i = 1; i < filtered.length; ++i) {
+            const prev = filtered[i - 1];
+            const curr = filtered[i];
+            const x0 = x(now - prev.ts), x1 = x(now - curr.ts);
+            const color = getLoylyColor(curr.value);
+            svg.append('line')
+                .attr('x1', x0)
+                .attr('y1', y(prev.value))
+                .attr('x2', x1)
+                .attr('y2', y(curr.value))
+                .attr('stroke', color)
+                .attr('stroke-width', 2)
+                .attr('fill', 'none');
+        }
         // X axis
-        svg.append("g")
-            .attr("transform", `translate(0,${height - margin.bottom})`)
-            .call(d3.axisBottom(x).ticks(6).tickFormat(i => `${data.length - i}s ago`))
-            .selectAll("text").attr("fill", "#aaa").attr("font-size", "0.8em");
+        svg.append('g')
+            .attr('transform', `translate(0,${height - margin.bottom})`)
+            .call(d3.axisBottom(x).ticks(6).tickFormat(ms => `${Math.round((windowMs - ms) / 1000)}s ago`))
+            .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
         // Y axis
-        svg.append("g")
-            .attr("transform", `translate(${margin.left},0)`)
+        svg.append('g')
+            .attr('transform', `translate(${margin.left},0)`)
             .call(d3.axisLeft(y).ticks(5))
-            .selectAll("text").attr("fill", "#aaa").attr("font-size", "0.8em");
-        svg.selectAll(".domain, .tick line").attr("stroke", "#444");
-    }, [data, width]);
+            .selectAll('text').attr('fill', '#aaa').attr('font-size', '0.8em');
+        svg.selectAll('.domain, .tick line').attr('stroke', '#444');
+    }, [data, width, windowMs]);
 
     return <svg ref={ref} style={{ width: "100%", height: "auto", display: "block" }} />;
 }
@@ -243,6 +268,8 @@ export default function RuuviApp() {
             setDebugMode(true);
             setScanActive(false);
             startSensor(true);
+            // Do NOT trigger fakeLoyly on first press
+            return;
         }
         if (sensorRef.current && sensorRef.current.fakeLoyly) sensorRef.current.fakeLoyly();
     }
@@ -251,13 +278,15 @@ export default function RuuviApp() {
 
     // Update history when apparentTemperature changes
     useEffect(() => {
-        if (sensor.apparentTemperature !== null && !isNaN(sensor.apparentTemperature)) {
-            setHistory(h => {
-                const arr = [...h, { value: sensor.apparentTemperature }];
-                return arr.length > 30 ? arr.slice(arr.length - 30) : arr;
-            });
-        }
-    }, [sensor.apparentTemperature]);
+        // Always run on every update, not just when value changes
+        setHistory(h => {
+            const now = Date.now();
+            const arr = [...h, { value: sensor.apparentTemperature, ts: now }];
+            // Keep only the last WINDOW_MS milliseconds
+            const WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+            return arr.filter(d => now - d.ts <= WINDOW_MS);
+        });
+    }, [sensor]);
 
     let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
     let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
