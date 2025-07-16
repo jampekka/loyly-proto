@@ -165,6 +165,8 @@ export function createRuuviNusSensor(onUpdate) {
                 };
                 await nusChar.startNotifications();
                 nusChar.addEventListener('characteristicvaluechanged', notificationHandler);
+                
+                
             } catch (error) {
                 onUpdate({ temperature: null, humidity: null, apparentTemperature: null, error: error.toString() });
             }

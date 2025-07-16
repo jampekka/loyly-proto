@@ -145,7 +145,7 @@ export default function RuuviApp() {
         if (isDebug) {
             s = createDebugSensor(update => setSensor(update));
         } else {
-            s = createRuuviNusSensor(update => {
+            s = createBleScanSensor(update => {
                 if (update.error) {
                     setError(update.error);
                     // If there's an error during connection, revert state
