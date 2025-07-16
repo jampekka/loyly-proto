@@ -8,7 +8,9 @@ const rollupOptions = {
     sw: 'service-worker.js'
   },
   output: {
-    entryFileNames: asset => asset.name === 'sw' ? 'service-worker.js' : '[name].js'
+    entryFileNames: asset => asset.name === 'sw' ? 'service-worker.js' : '[name].js',
+    chunkFileNames: '[name].js',
+    assetFileNames: '[name][extname]'
   }
 }
 
