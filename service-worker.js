@@ -1,5 +1,6 @@
 const CACHE_NAME = 'fallback-cache';
 
+/*
 self.addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request));
 });
@@ -13,4 +14,4 @@ async function handleRequest(request) {
   } catch {
     return await caches.match(request);
   }
-}
+}*/

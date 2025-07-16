@@ -134,19 +134,28 @@ export default function RuuviApp() {
     const sensorRef = useRef(null);
     const [now, setNow] = useState(Date.now());
 
+    const history = useRecentSamples(WINDOW_MS);
+    
+    
+    const prevSampleTime = history.length > 0 ? history[history.length - 1].ts : 0;
+    let timeSincePrevSample = (now - prevSampleTime) / 1000
+    let timeDecay = Math.exp(-timeSincePrevSample/10);
+    let labelOpacity = Math.max(timeDecay, 0.5); // Ensure minimum opacity
+
     // Continuously update 'now' for smooth scrolling x axis
     useEffect(() => {
         let raf;
         function update() {
-            setNow(Date.now());
+            let now = Date.now();
+            
+
+            //console.log(prevSampleTime, timeSincePrevSample, decay);
+            setNow(now);
             raf = requestAnimationFrame(update);
         }
         raf = requestAnimationFrame(update);
         return () => raf && cancelAnimationFrame(raf);
     }, []);
-
-    // Use liveQuery for samples from the past WINDOW_MS
-    const history = useRecentSamples(WINDOW_MS);
 
     // Start/stop sensor
     async function startSensor(isDebug) {
@@ -276,9 +285,11 @@ export default function RuuviApp() {
         logSample(sample, deviceInfo);
     }, [sensor, connectionState, deviceInfo]);
 
-    let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
-    let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
-    let at = sensor.apparentTemperature !== null && sensor.apparentTemperature !== undefined ? sensor.apparentTemperature.toFixed(1) : '?';
+    // Use last sample from history for label values, always show even when disconnected
+    const lastSample = history.length > 0 ? history[history.length - 1] : null;
+    let t = lastSample && lastSample.temperature !== null && lastSample.temperature !== undefined ? lastSample.temperature.toFixed(1) : '?';
+    let rh = lastSample && lastSample.humidity !== null && lastSample.humidity !== undefined ? lastSample.humidity.toFixed(1) : '?';
+    let at = lastSample && lastSample.apparentTemperature !== null && lastSample.apparentTemperature !== undefined ? lastSample.apparentTemperature.toFixed(1) : '?';
     let loylyColor = (at !== '?') ? getLoylyColor(at) : '#fff';
 
     const buttonText = {
@@ -292,7 +303,9 @@ export default function RuuviApp() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em' }}>
                 <div style={{ textAlign: 'center' }}>
                     <div className="loyly-label">Löyly</div>
-                    <div className="loyly-value" style={{ color: loylyColor }}>{`${at}°L`}</div>
+                    <div className="loyly-value" style={{ color: loylyColor }}>
+                        <span style={{ opacity: labelOpacity }}>{at}</span><span>°L</span>
+                    </div>
                 </div>
                 <div style={{ width: "100%", margin: "1.2em auto 0 auto" }}>
                         <TimeSeriesChart data={history} now={now} />
@@ -300,11 +313,15 @@ export default function RuuviApp() {
                 <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2.5em', width: '100%' }}>
                     <div style={{ textAlign: 'center', flex: 1 }}>
                         <div className="temp-label">Temperature</div>
-                        <div className="temp-value">{`${t}°C`}</div>
+                        <div className="temp-value">
+                            <span style={{ opacity: labelOpacity }}>{t}</span><span>°C</span>
+                        </div>
                     </div>
                     <div style={{ textAlign: 'center', flex: 1 }}>
                         <div className="hum-label">Humidity</div>
-                        <div className="hum-value">{`${rh}%`}</div>
+                        <div className="hum-value">
+                            <span style={{ opacity: labelOpacity }}>{rh}</span><span>%</span>
+                        </div>
                     </div>
                 </div>
                 {error && <div className="error-msg">{error}</div>}
