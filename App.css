@@ -1,4 +1,5 @@
-@import url('https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css');
+/* Use Pico CSS from npm package */
+@import '@picocss/pico/css/pico.min.css';
 
 
 html, body {
