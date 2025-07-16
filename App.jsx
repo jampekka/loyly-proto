@@ -16,6 +16,18 @@ import { useRecentSamples } from "./useRecentSamples";
 function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
+    const [now, setNow] = useState(Date.now());
+    // Continuously update 'now' for smooth scrolling x axis
+    useEffect(() => {
+        let raf;
+        function update() {
+            setNow(Date.now());
+            raf = requestAnimationFrame(update);
+        }
+        raf = requestAnimationFrame(update);
+        return () => raf && cancelAnimationFrame(raf);
+    }, []);
+
     useEffect(() => {
         if (!ref.current) return;
         const parent = ref.current.parentElement;
@@ -32,10 +44,12 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         return () => observer.disconnect();
     }, []);
 
+    // TODO: Render so that if there's a substantial gap in the data, break the line
+    // TODO: Make sure the past doesn't clip off suddenly when the last sample goes out of the window
+    //       by including the last sample out of the window
     useEffect(() => {
         if (!ref.current || width === 0) return;
         // Only plot data within the window
-        const now = Date.now();
         let filtered = data.filter(d => now - d.ts <= windowMs);
         // Remove garbage samples: both apparentTemperature and temperature null/NaN
         filtered = filtered.filter(d => (
@@ -48,9 +62,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         const svg = d3.select(ref.current);
         svg.selectAll("*").remove();
         svg.attr("width", width).attr("height", height);
-        // X scale: time axis
-        const minTs = filtered[0].ts;
-        const maxTs = filtered[filtered.length - 1].ts;
+        // X scale: time axis (scrolls smoothly)
         const x = d3.scaleLinear()
             .domain([0, windowMs]) // 0s on the right
             .range([width - margin.right, margin.left]); // Newest right
@@ -121,7 +133,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
             .call(d3.axisRight(y).ticks(5))
             .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
         svg.selectAll('.domain, .tick line').attr('stroke', '#444');
-    }, [data, width, windowMs]);
+    }, [data, width, windowMs, now]);
 
     return <svg ref={ref} style={{ width: "100%", height: "auto", display: "block" }} />;
 }
