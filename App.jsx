@@ -126,90 +126,156 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
 
 let wakeLock = null;
 export default function RuuviApp() {
-    const [scanActive, setScanActive] = useState(false);
+    const [connectionState, setConnectionState] = useState("idle"); // idle, connecting, connected, disconnecting
     const [debugMode, setDebugMode] = useState(false);
     const [sensor, setSensor] = useState({ temperature: null, humidity: null, apparentTemperature: null });
     const [error, setError] = useState(null);
     const [history, setHistory] = useState([]);
     const sensorRef = useRef(null);
+
     // Start/stop sensor
     async function startSensor(isDebug) {
-        if (sensorRef.current) sensorRef.current.stop();
+        if (sensorRef.current) {
+            await sensorRef.current.stop();
+        }
         setSensor({ temperature: null, humidity: null, apparentTemperature: null });
         setError(null);
+
         let s;
         if (isDebug) {
             s = createDebugSensor(update => setSensor(update));
         } else {
             s = createRuuviNusSensor(update => {
-                if (update.error) setError(update.error);
-                else setSensor(update);
+                if (update.error) {
+                    setError(update.error);
+                    // If there's an error during connection, revert state
+                    if (connectionState === "connecting") {
+                        setConnectionState("idle");
+                    }
+                } else {
+                    setSensor(update);
+                }
             });
         }
         sensorRef.current = s;
         await s.start();
+        // If we are in debug mode, we are instantly connected.
+        // Otherwise, the connection is established when we get the first data.
+        if (isDebug) {
+            setConnectionState("connected");
+        }
     }
-    function stopSensor() {
-        if (sensorRef.current) sensorRef.current.stop();
+
+    async function stopSensor() {
+        if (sensorRef.current) {
+            await sensorRef.current.stop();
+            sensorRef.current = null;
+        }
         setSensor({ temperature: null, humidity: null, apparentTemperature: null });
         setError(null);
+        setConnectionState("idle");
     }
+
     // UI event handlers
     function handleDebugStop() {
         setDebugMode(false);
         stopSensor();
     }
+
     async function handleScanClick() {
-        setDebugMode(false);
-        setScanActive(v => {
-            if (!v) startSensor(false);
-            else stopSensor();
-            return !v;
-        });
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            console.debug("Wake lock", wakeLock)
-        } catch (err) {
-            console.error("Error getting screen wake lock")
+        if (connectionState === "connected") {
+            setConnectionState("disconnecting");
+            await stopSensor();
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+            return;
         }
 
-        
+        if (connectionState === "idle") {
+            setDebugMode(false);
+            setConnectionState("connecting");
+            try {
+                await startSensor(false);
+                // The state will be set to 'connected' by the effect hook when data arrives
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.debug("Wake lock", wakeLock);
+            } catch (err) {
+                console.error("Error during connection setup:", err);
+                setError(err.message || "Connection failed. Please try again.");
+                setConnectionState("idle");
+                if (sensorRef.current) {
+                    await sensorRef.current.stop();
+                    sensorRef.current = null;
+                }
+            }
+        }
     }
-    function handleFakeLoyly() {
+
+    async function handleFakeLoyly() {
         if (!debugMode) {
             setDebugMode(true);
-            setScanActive(false);
-            startSensor(true);
+            setConnectionState("connecting");
+            await startSensor(true);
             // Do NOT trigger fakeLoyly on first press
             return;
         }
-        if (sensorRef.current && sensorRef.current.fakeLoyly) sensorRef.current.fakeLoyly();
+        if (sensorRef.current && sensorRef.current.fakeLoyly) {
+            sensorRef.current.fakeLoyly();
+        }
     }
+
     // Clean up on unmount
-    useEffect(() => () => stopSensor(), []);
+    useEffect(() => {
+        return () => {
+            if (sensorRef.current) {
+                sensorRef.current.stop();
+            }
+            if (wakeLock) {
+                wakeLock.release();
+            }
+        };
+    }, []);
 
     // Update history when apparentTemperature changes
     useEffect(() => {
-        // Always run on every update, not just when value changes
+        // Do not add initial empty sensor state to history
+        if (sensor.apparentTemperature === null && sensor.temperature === null) {
+            return;
+        }
+
+        // If we were connecting and we received data, we are now connected.
+        if (connectionState === "connecting") {
+            setConnectionState("connected");
+        }
+
         setHistory(h => {
             const now = Date.now();
             const arr = [...h, { value: sensor.apparentTemperature, temperature: sensor.temperature, ts: now }];
             // Keep only the last WINDOW_MS milliseconds
             return arr.filter(d => now - d.ts <= WINDOW_MS);
         });
-    }, [sensor]);
+    }, [sensor, connectionState]);
 
     let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
     let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
     let at = sensor.apparentTemperature !== null && sensor.apparentTemperature !== undefined ? sensor.apparentTemperature.toFixed(1) : '?';
     let loylyColor = (at !== '?') ? getLoylyColor(at) : '#fff';
+
+    const buttonText = {
+        idle: "Connect",
+        connecting: "Connecting...",
+        connected: "Disconnect",
+        disconnecting: "Disconnecting...",
+    }[connectionState];
+
     return (
         <main style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em' }}>
                 <div style={{ textAlign: 'center' }}>
                     <div className="loyly-label">Löyly</div>
                     <div className="loyly-value" style={{ color: loylyColor }}>{`${at}°L`}</div>
-
                 </div>
                 <div style={{ width: "100%", margin: "1.2em auto 0 auto" }}>
                         <TimeSeriesChart data={history} />
@@ -230,10 +296,11 @@ export default function RuuviApp() {
                 <button
                     id="scan"
                     onClick={handleScanClick}
-                    className={scanActive ? 'contrast' : ''}
+                    disabled={connectionState === "connecting" || connectionState === "disconnecting"}
+                    className={connectionState === 'connected' ? 'contrast' : ''}
                     style={{ width: '100%', fontSize: '1.2em', marginTop: '2em' }}
                 >
-                    {scanActive ? 'Disconnect' : 'Connect'}
+                    {buttonText}
                 </button>
                 <div className="debug-links">
                     <a href="#" onClick={e => { e.preventDefault(); handleFakeLoyly(); }}>Fake löyly</a>
