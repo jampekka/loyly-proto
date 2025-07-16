@@ -61,11 +61,15 @@ export function createBleScanSensor(onUpdate) {
                             const decoded = decodeRuuviDF5(dataView);
                             if (decoded) {
                                 const at = apparentTemperature(decoded.temperature, decoded.humidity);
-                                onUpdate({
-                                    temperature: decoded.temperature,
-                                    humidity: decoded.humidity,
+                                const meta = {
+                                    name: event.device?.name ?? null,
+                                    mac: event.device?.id ?? null
+                                };
+                                const sample = {
+                                    ...decoded,
                                     apparentTemperature: at
-                                });
+                                };
+                                onUpdate(sample, meta);
                             }
                         }
                     }
@@ -156,17 +160,19 @@ export function createRuuviNusSensor(onUpdate) {
                     const decoded = decodeRuuviDF5(value);
                     if (decoded) {
                         const at = apparentTemperature(decoded.temperature, decoded.humidity);
-                        onUpdate({
-                            temperature: decoded.temperature,
-                            humidity: decoded.humidity,
+                        const meta = {
+                            name: device?.name ?? null,
+                            mac: device?.id ?? null
+                        };
+                        const sample = {
+                            ...decoded,
                             apparentTemperature: at
-                        });
+                        };
+                        onUpdate(sample, meta);
                     }
                 };
                 await nusChar.startNotifications();
                 nusChar.addEventListener('characteristicvaluechanged', notificationHandler);
-                
-                
             } catch (error) {
                 onUpdate({ temperature: null, humidity: null, apparentTemperature: null, error: error.toString() });
             }

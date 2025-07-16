@@ -10,6 +10,8 @@ import {
   getLoylyColor,
   WINDOW_MS
 } from "./ruuvi";
+import { db, logSample } from "./db";
+import { useRecentSamples } from "./useRecentSamples";
 
 function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
     const ref = useRef();
@@ -35,10 +37,10 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         // Only plot data within the window
         const now = Date.now();
         let filtered = data.filter(d => now - d.ts <= windowMs);
-        // Remove garbage samples: both value and temperature null/NaN
+        // Remove garbage samples: both apparentTemperature and temperature null/NaN
         filtered = filtered.filter(d => (
-            (d.value !== null && !isNaN(d.value)) ||
-            (d.temperature !== null && !isNaN(d.temperature))
+            (d.apparentTemperature !== null && typeof d.apparentTemperature === 'number' && !isNaN(d.apparentTemperature)) ||
+            (d.temperature !== null && typeof d.temperature === 'number' && !isNaN(d.temperature))
         ));
         if (!filtered.length) return;
         const height = Math.round(width * 0.5); // 50% aspect ratio
@@ -55,21 +57,21 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         const y = d3.scaleLinear()
             .domain([
                 Math.min(
-                    d3.min(filtered, d => d.value),
+                    d3.min(filtered, d => d.apparentTemperature),
                     d3.min(filtered, d => d.temperature)
                 ) - 2,
                 Math.max(
-                    d3.max(filtered, d => d.value),
+                    d3.max(filtered, d => d.apparentTemperature),
                     d3.max(filtered, d => d.temperature)
                 ) + 2
             ])
             .range([height - margin.bottom, margin.top]);
         // Area path
         const areaPath = d3.area()
-            .defined(d => d.value !== null && !isNaN(d.value)) // allow flat lines
+            .defined(d => d.apparentTemperature !== null && typeof d.apparentTemperature === 'number' && !isNaN(d.apparentTemperature))
             .x(d => x(now - d.ts))
             .y0(height - margin.bottom)
-            .y1(d => y(d.value));
+            .y1(d => y(d.apparentTemperature));
         // Draw area fill (ensure always drawn, even if flat)
         svg.append('path')
             .datum(filtered)
@@ -81,12 +83,12 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
             const prev = filtered[i - 1];
             const curr = filtered[i];
             const x0 = x(now - prev.ts), x1 = x(now - curr.ts);
-            const color = getLoylyColor(curr.value);
+            const color = getLoylyColor(curr.apparentTemperature);
             svg.append('line')
                 .attr('x1', x0)
-                .attr('y1', y(prev.value))
+                .attr('y1', y(prev.apparentTemperature))
                 .attr('x2', x1)
-                .attr('y2', y(curr.value))
+                .attr('y2', y(curr.apparentTemperature))
                 .attr('stroke', color)
                 .attr('stroke-width', 2)
                 .attr('fill', 'none');
@@ -94,7 +96,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         // --- Add temperature line ---
         if (filtered[0] && filtered[0].temperature !== undefined) {
             const tempLine = d3.line()
-                .defined(d => d.temperature !== null && !isNaN(d.temperature))
+                .defined(d => d.temperature !== null && typeof d.temperature === 'number' && !isNaN(d.temperature))
                 .x(d => x(now - d.ts))
                 .y(d => y(d.temperature));
             svg.append('path')
@@ -130,8 +132,11 @@ export default function RuuviApp() {
     const [debugMode, setDebugMode] = useState(false);
     const [sensor, setSensor] = useState({ temperature: null, humidity: null, apparentTemperature: null });
     const [error, setError] = useState(null);
-    const [history, setHistory] = useState([]);
+    const [deviceInfo, setDeviceInfo] = useState({ name: null, mac: null });
     const sensorRef = useRef(null);
+
+    // Use liveQuery for samples from the past WINDOW_MS
+    const history = useRecentSamples(WINDOW_MS);
 
     // Start/stop sensor
     async function startSensor(isDebug) {
@@ -140,12 +145,13 @@ export default function RuuviApp() {
         }
         setSensor({ temperature: null, humidity: null, apparentTemperature: null });
         setError(null);
+        setDeviceInfo({ name: null, mac: null });
 
         let s;
         if (isDebug) {
             s = createDebugSensor(update => setSensor(update));
         } else {
-            s = createBleScanSensor(update => {
+            s = createBleScanSensor((update, meta) => {
                 if (update.error) {
                     setError(update.error);
                     // If there's an error during connection, revert state
@@ -154,6 +160,9 @@ export default function RuuviApp() {
                     }
                 } else {
                     setSensor(update);
+                    if (meta && (meta.name || meta.mac)) {
+                        setDeviceInfo({ name: meta.name ?? null, mac: meta.mac ?? null });
+                    }
                 }
             });
         }
@@ -238,9 +247,8 @@ export default function RuuviApp() {
         };
     }, []);
 
-    // Update history when apparentTemperature changes
+    // Update history and log sample when new sensor data arrives
     useEffect(() => {
-        // Do not add initial empty sensor state to history
         if (sensor.apparentTemperature === null && sensor.temperature === null) {
             return;
         }
@@ -250,13 +258,13 @@ export default function RuuviApp() {
             setConnectionState("connected");
         }
 
-        setHistory(h => {
-            const now = Date.now();
-            const arr = [...h, { value: sensor.apparentTemperature, temperature: sensor.temperature, ts: now }];
-            // Keep only the last WINDOW_MS milliseconds
-            return arr.filter(d => now - d.ts <= WINDOW_MS);
-        });
-    }, [sensor, connectionState]);
+        const now = Date.now();
+        const sample = {
+            ...sensor,
+            ts: now
+        };
+        logSample(sample, deviceInfo);
+    }, [sensor, connectionState, deviceInfo]);
 
     let t = sensor.temperature !== null && sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '?';
     let rh = sensor.humidity !== null && sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '?';
@@ -269,7 +277,6 @@ export default function RuuviApp() {
         connected: "Disconnect",
         disconnecting: "Disconnecting...",
     }[connectionState];
-
     return (
         <main style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em' }}>
