@@ -64,33 +64,30 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
                 ) + 2
             ])
             .range([height - margin.bottom, margin.top]);
-        // Area path
-        const areaPath = d3.area()
-            .defined(d => d.apparentTemperature !== null && typeof d.apparentTemperature === 'number' && !isNaN(d.apparentTemperature))
-            .x(d => x(now - d.ts))
-            .y0(height - margin.bottom)
-            .y1(d => y(d.apparentTemperature));
-        // Draw area fill (ensure always drawn, even if flat)
-        svg.append('path')
-            .datum(filtered)
-            .attr('d', areaPath)
-            .attr('fill', '#222') // fallback fill, replace with gradient if needed
-            .attr('stroke', 'none');
-        // Colored line segments
+       
+        // Colored line segments (disconnect if >3s between samples)
         for (let i = 1; i < filtered.length; ++i) {
             const prev = filtered[i - 1];
             const curr = filtered[i];
             const x0 = x(now - prev.ts), x1 = x(now - curr.ts);
             const color = getLoylyColor(curr.apparentTemperature);
-            svg.append('line')
-                .attr('x1', x0)
-                .attr('y1', y(prev.apparentTemperature))
-                .attr('x2', x1)
-                .attr('y2', y(curr.apparentTemperature))
-                .attr('stroke', color)
-                .attr('stroke-width', 2)
-                .attr('fill', 'none');
+
+            let opacity = (curr.ts - prev.ts > 3000) ? 0.5 : 1.0;
+            
+            if ((curr.ts - prev.ts) <= 3000) {
+                svg.append('line')
+                    .attr('x1', x0)
+                    .attr('y1', y(prev.apparentTemperature))
+                    .attr('x2', x1)
+                    .attr('y2', y(curr.apparentTemperature))
+                    .attr('stroke', color)
+                    .attr('stroke-width', 2)
+                    .attr('fill', 'none')
+                    .attr('opacity', opacity)
+                    ;
+            }
         }
+        
         // --- Add temperature line ---
         if (filtered[0] && filtered[0].temperature !== undefined) {
             const tempLine = d3.line()
@@ -287,9 +284,12 @@ export default function RuuviApp() {
 
     // Use last sample from history for label values, always show even when disconnected
     const lastSample = history.length > 0 ? history[history.length - 1] : null;
-    let t = lastSample && lastSample.temperature !== null && lastSample.temperature !== undefined ? lastSample.temperature.toFixed(1) : '?';
-    let rh = lastSample && lastSample.humidity !== null && lastSample.humidity !== undefined ? lastSample.humidity.toFixed(1) : '?';
-    let at = lastSample && lastSample.apparentTemperature !== null && lastSample.apparentTemperature !== undefined ? lastSample.apparentTemperature.toFixed(1) : '?';
+    let t = lastSample?.temperature ?? '?';
+    let rh = lastSample?.humidity ?? '?';
+    let at = lastSample?.apparentTemperature ?? '?';
+    if (t !== '?') t = t.toFixed(1);
+    if (rh !== '?') rh = rh.toFixed(1);
+    if (at !== '?') at = at.toFixed(1);
     let loylyColor = (at !== '?') ? getLoylyColor(at) : '#fff';
 
     const buttonText = {
