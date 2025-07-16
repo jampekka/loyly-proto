@@ -8,11 +8,10 @@ html, body {
     min-height: 100vh;
 }
 #root {
-    margin: 3em auto 0 auto;
-    background: #000;
-    border-radius: 1.2em;
-    box-shadow: 0 4px 32px #0008;
-    padding: 2.5em 2em 2em 2em;
+    margin: 0em auto 0 auto;
+    
+    padding: 0em;
+    padding-top: 1em;
 }
 button, input[type=range] {
     margin-top: 0.5em;

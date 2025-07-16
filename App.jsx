@@ -44,7 +44,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
         ));
         if (!filtered.length) return;
         const height = Math.round(width * 0.5); // 50% aspect ratio
-        const margin = { top: 10, right: 36, bottom: 24, left: 10 };
+        const margin = { top: 10, right: 0, bottom: 24, left: 0 };
         const svg = d3.select(ref.current);
         svg.selectAll("*").remove();
         svg.attr("width", width).attr("height", height);
@@ -64,7 +64,21 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
                 ) + 2
             ])
             .range([height - margin.bottom, margin.top]);
-       
+
+        // --- Y axis: inset numeric ticks only, right-aligned ---
+        const yTicks = y.ticks(3);
+        svg.selectAll('.y-inset-tick')
+            .data(yTicks)
+            .enter()
+            .append('text')
+            .attr('class', 'y-inset-tick')
+            .attr('x', width - 5)
+            .attr('y', d => y(d) + 5)
+            .attr('fill', '#aaa')
+            .attr('font-size', '1em')
+            .attr('text-anchor', 'end')
+            .text(d => d.toFixed(0));
+
         // Colored line segments (disconnect if >3s between samples)
         for (let i = 1; i < filtered.length; ++i) {
             const prev = filtered[i - 1];
@@ -72,7 +86,7 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
             const x0 = x(now - prev.ts), x1 = x(now - curr.ts);
             const color = getLoylyColor(curr.apparentTemperature);
 
-            let opacity = (curr.ts - prev.ts > 3000) ? 0.5 : 1.0;
+            let opacity = (curr.ts - prev.ts > 3000) ? 0.5 : 0.8;
             
             if ((curr.ts - prev.ts) <= 3000) {
                 svg.append('line')
@@ -99,21 +113,19 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
                 .attr('d', tempLine)
                 .attr('stroke', '#fff')
                 .attr('stroke-width', 2)
-                .attr('fill', 'none');
+                .attr('fill', 'none')
+                .attr('opacity', 0.8);
         }
         // --- End temperature line ---
-        // X axis
+        // X axis (remove far end tick labels)
+        const xTicks = Array.from({length: Math.floor(windowMs / 60000) + 1}, (_, i) => i * 60000)
+            .filter(ms => ms !== 0 && ms !== windowMs); // Remove 0 and far right
         svg.append('g')
             .attr('transform', `translate(0,${height - margin.bottom})`)
             .call(d3.axisBottom(x)
-                .tickValues(Array.from({length: Math.floor(windowMs / 60000) + 1}, (_, i) => i * 60000))
+                .tickValues(xTicks)
                 .tickFormat(ms => `${Math.round(ms / 60000)}`)
             )
-            .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
-        // Y axis (move to right)
-        svg.append('g')
-            .attr('transform', `translate(${width - margin.right},0)`)
-            .call(d3.axisRight(y).ticks(5))
             .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
         svg.selectAll('.domain, .tick line').attr('stroke', '#444');
     }, [data, width, windowMs, now]);
