@@ -13,20 +13,9 @@ import {
 import { db, logSample } from "./db";
 import { useRecentSamples } from "./useRecentSamples";
 
-function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
+function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
-    const [now, setNow] = useState(Date.now());
-    // Continuously update 'now' for smooth scrolling x axis
-    useEffect(() => {
-        let raf;
-        function update() {
-            setNow(Date.now());
-            raf = requestAnimationFrame(update);
-        }
-        raf = requestAnimationFrame(update);
-        return () => raf && cancelAnimationFrame(raf);
-    }, []);
 
     useEffect(() => {
         if (!ref.current) return;
@@ -44,9 +33,6 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS }) {
         return () => observer.disconnect();
     }, []);
 
-    // TODO: Render so that if there's a substantial gap in the data, break the line
-    // TODO: Make sure the past doesn't clip off suddenly when the last sample goes out of the window
-    //       by including the last sample out of the window
     useEffect(() => {
         if (!ref.current || width === 0) return;
         // Only plot data within the window
@@ -146,6 +132,18 @@ export default function RuuviApp() {
     const [error, setError] = useState(null);
     const [deviceInfo, setDeviceInfo] = useState({ name: null, mac: null });
     const sensorRef = useRef(null);
+    const [now, setNow] = useState(Date.now());
+
+    // Continuously update 'now' for smooth scrolling x axis
+    useEffect(() => {
+        let raf;
+        function update() {
+            setNow(Date.now());
+            raf = requestAnimationFrame(update);
+        }
+        raf = requestAnimationFrame(update);
+        return () => raf && cancelAnimationFrame(raf);
+    }, []);
 
     // Use liveQuery for samples from the past WINDOW_MS
     const history = useRecentSamples(WINDOW_MS);
@@ -297,7 +295,7 @@ export default function RuuviApp() {
                     <div className="loyly-value" style={{ color: loylyColor }}>{`${at}°L`}</div>
                 </div>
                 <div style={{ width: "100%", margin: "1.2em auto 0 auto" }}>
-                        <TimeSeriesChart data={history} />
+                        <TimeSeriesChart data={history} now={now} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2.5em', width: '100%' }}>
                     <div style={{ textAlign: 'center', flex: 1 }}>
