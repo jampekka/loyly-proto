@@ -302,13 +302,6 @@ export default function RuuviApp() {
         } catch (err) {
             console.error("Error getting screen wake lock")
         }
-        const elem = document.documentElement; // or any element
-        if (elem.requestFullscreen) {
-            await elem.requestFullscreen();
-            console.log('Entered fullscreen');
-        } else {
-            console.warn('Fullscreen API not supported');
-        }
 
         
     }
