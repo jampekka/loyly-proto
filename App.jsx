@@ -91,11 +91,11 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now, valueKey = "apparent
             grad.append('stop')
                 .attr('offset', '0%')
                 .attr('stop-color', minColor)
-                .attr('stop-opacity', 0.5);
+                .attr('stop-opacity', 0.6);
             grad.append('stop')
                 .attr('offset', '100%')
                 .attr('stop-color', maxColor)
-                .attr('stop-opacity', 0.5);
+                .attr('stop-opacity', 0.6);
             const area = d3.area()
                 .x(d => x(now - d.ts))
                 .y0(y.range()[0])
