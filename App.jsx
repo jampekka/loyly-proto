@@ -13,7 +13,8 @@ import {
 import { db, logSample } from "./db";
 import { useRecentSamples } from "./useRecentSamples";
 
-function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
+// Make TimeSeriesChart generic for any value key and allow lineColor/fillColorFn as props
+function TimeSeriesChart({ data, windowMs = WINDOW_MS, now, valueKey = "apparentTemperature", lineColor = "#fff", fillColorFn, heightRatio = 1 }) {
     const ref = useRef();
     const [width, setWidth] = useState(0);
 
@@ -37,13 +38,14 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
         if (!ref.current || width === 0) return;
         // Only plot data within the window
         let filtered = data.filter(d => now - d.ts <= windowMs);
-        // Remove garbage samples: both apparentTemperature and temperature null/NaN
+        // Remove garbage samples: valueKey null/NaN
         filtered = filtered.filter(d => (
-            (d.apparentTemperature !== null && typeof d.apparentTemperature === 'number' && !isNaN(d.apparentTemperature)) ||
-            (d.temperature !== null && typeof d.temperature === 'number' && !isNaN(d.temperature))
+            d[valueKey] !== null && typeof d[valueKey] === 'number' && !isNaN(d[valueKey])
         ));
         if (!filtered.length) return;
-        const height = Math.round(width * 0.5); // 50% aspect ratio
+        // Chart height: 0.35 for normal, 0.525 for 1.5x (apparentTemperature)
+        const baseAspect = 0.35;
+        const height = Math.round(width * baseAspect * heightRatio);
         const margin = { top: 10, right: 0, bottom: 24, left: 0 };
         const svg = d3.select(ref.current);
         svg.selectAll("*").remove();
@@ -54,19 +56,13 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
             .range([width - margin.right, margin.left]); // Newest right
         const y = d3.scaleLinear()
             .domain([
-                Math.min(
-                    d3.min(filtered, d => d.apparentTemperature),
-                    d3.min(filtered, d => d.temperature)
-                ) - 2,
-                Math.max(
-                    d3.max(filtered, d => d.apparentTemperature),
-                    d3.max(filtered, d => d.temperature)
-                ) + 2
+                d3.min(filtered, d => d[valueKey]) - 2,
+                d3.max(filtered, d => d[valueKey]) + 2
             ])
             .range([height - margin.bottom, margin.top]);
 
         // --- Y axis: inset numeric ticks only, right-aligned ---
-        const yTicks = y.ticks(3);
+        const yTicks = y.ticks(2);
         svg.selectAll('.y-inset-tick')
             .data(yTicks)
             .enter()
@@ -75,48 +71,58 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
             .attr('x', width - 5)
             .attr('y', d => y(d) + 5)
             .attr('fill', '#aaa')
-            .attr('font-size', '1em')
+            .attr('font-size', '0.8em')
             .attr('text-anchor', 'end')
             .text(d => d.toFixed(0));
 
-        // Colored line segments (disconnect if >3s between samples)
-        for (let i = 1; i < filtered.length; ++i) {
-            const prev = filtered[i - 1];
-            const curr = filtered[i];
-            const x0 = x(now - prev.ts), x1 = x(now - curr.ts);
-            const color = getLoylyColor(curr.apparentTemperature);
-
-            let opacity = (curr.ts - prev.ts > 3000) ? 0.5 : 0.8;
-            
-            if ((curr.ts - prev.ts) <= 3000) {
-                svg.append('line')
-                    .attr('x1', x0)
-                    .attr('y1', y(prev.apparentTemperature))
-                    .attr('x2', x1)
-                    .attr('y2', y(curr.apparentTemperature))
-                    .attr('stroke', color)
-                    .attr('stroke-width', 2)
-                    .attr('fill', 'none')
-                    .attr('opacity', opacity)
-                    ;
-            }
-        }
-        
-        // --- Add temperature line ---
-        if (filtered[0] && filtered[0].temperature !== undefined) {
-            const tempLine = d3.line()
-                .defined(d => d.temperature !== null && typeof d.temperature === 'number' && !isNaN(d.temperature))
+        // --- Optional filled polygon with y-gradient fill ---
+        if (typeof fillColorFn === 'function' && filtered.length > 1) {
+            const gradientId = `gradient-${valueKey}`;
+            const minVal = d3.min(filtered, d => d[valueKey]);
+            const maxVal = d3.max(filtered, d => d[valueKey]);
+            const minColor = fillColorFn(minVal);
+            const maxColor = fillColorFn(maxVal);
+            svg.select(`#${gradientId}`).remove();
+            const defs = svg.append('defs');
+            const grad = defs.append('linearGradient')
+                .attr('id', gradientId)
+                .attr('x1', '0%').attr('y1', '100%')
+                .attr('x2', '0%').attr('y2', '0%');
+            grad.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', minColor)
+                .attr('stop-opacity', 0.5);
+            grad.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', maxColor)
+                .attr('stop-opacity', 0.5);
+            const area = d3.area()
                 .x(d => x(now - d.ts))
-                .y(d => y(d.temperature));
+                .y0(y.range()[0])
+                .y1(d => y(d[valueKey]))
+                .defined(d => d[valueKey] !== null && !isNaN(d[valueKey]));
             svg.append('path')
                 .datum(filtered)
-                .attr('d', tempLine)
-                .attr('stroke', '#fff')
-                .attr('stroke-width', 2)
-                .attr('fill', 'none')
-                .attr('opacity', 0.8);
+                .attr('fill', `url(#${gradientId})`)
+                .attr('stroke', 'none')
+                .attr('d', area);
         }
-        // --- End temperature line ---
+
+        // --- Continuous line for all valueKeys ---
+        if (filtered.length > 1) {
+            const line = d3.line()
+                .x(d => x(now - d.ts))
+                .y(d => y(d[valueKey]))
+                .defined(d => d[valueKey] !== null && !isNaN(d[valueKey]));
+            svg.append('path')
+                .datum(filtered)
+                .attr('fill', 'none')
+                .attr('stroke', lineColor)
+                .attr('stroke-width', 1)
+                .attr('opacity', 0.9)
+                .attr('d', line);
+        }
+
         // X axis (remove far end tick labels)
         const xTicks = Array.from({length: Math.floor(windowMs / 60000) + 1}, (_, i) => i * 60000)
             .filter(ms => ms !== 0 && ms !== windowMs); // Remove 0 and far right
@@ -126,9 +132,9 @@ function TimeSeriesChart({ data, windowMs = WINDOW_MS, now }) {
                 .tickValues(xTicks)
                 .tickFormat(ms => `${Math.round(ms / 60000)}`)
             )
-            .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.5em');
+            .selectAll('text').attr('fill', '#aaa').attr('font-size', '1.1em');
         svg.selectAll('.domain, .tick line').attr('stroke', '#444');
-    }, [data, width, windowMs, now]);
+    }, [data, width, windowMs, now, valueKey, lineColor, fillColorFn, heightRatio]);
 
     return <svg ref={ref} style={{ width: "100%", height: "auto", display: "block" }} />;
 }
@@ -312,29 +318,55 @@ export default function RuuviApp() {
     }[connectionState];
     return (
         <main style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5em', marginBottom: '2em', marginTop: '0.5em' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div className="loyly-label">Löyly</div>
-                    <div className="loyly-value" style={{ color: loylyColor }}>
-                        <span style={{ opacity: labelOpacity }}>{at}</span><span>°L</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2.5em', marginBottom: '2em', marginTop: '0.5em' }}>
+                {/* Apparent Temperature (Löyly) */}
+                <div style={{ width: '100%' }}>
+                    <div className="display-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2em' }}>
+                        <div className="loyly-label" style={{ textAlign: 'left', flex: 1 }}>Löyly</div>
+                        <div className="loyly-value" style={{ color: loylyColor, textAlign: 'right', flex: 1 }}>
+                            <span style={{ opacity: labelOpacity }}>{at}</span><span>°L</span>
+                        </div>
                     </div>
+                    <TimeSeriesChart
+                        data={history}
+                        now={now}
+                        valueKey="apparentTemperature"
+                        lineColor="rgba(255, 255, 255, 0.8)"
+                        fillColorFn={getLoylyColor}
+                        heightRatio={1.3}
+                    />
                 </div>
-                <div style={{ width: "100%", margin: "1.2em auto 0 auto" }}>
-                        <TimeSeriesChart data={history} now={now} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2.5em', width: '100%' }}>
-                    <div style={{ textAlign: 'center', flex: 1 }}>
-                        <div className="temp-label">Temperature</div>
-                        <div className="temp-value">
+                {/* Temperature */}
+                <div style={{ width: '100%' }}>
+                    <div className="display-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2em' }}>
+                        <div className="temp-label" style={{ textAlign: 'left', flex: 1 }}>Temperature</div>
+                        <div className="temp-value" style={{ textAlign: 'right', flex: 1 }}>
                             <span style={{ opacity: labelOpacity }}>{t}</span><span>°C</span>
                         </div>
                     </div>
-                    <div style={{ textAlign: 'center', flex: 1 }}>
-                        <div className="hum-label">Humidity</div>
-                        <div className="hum-value">
+                    <TimeSeriesChart
+                        data={history}
+                        now={now}
+                        valueKey="temperature"
+                        lineColor="#fff"
+                        heightRatio={1}
+                    />
+                </div>
+                {/* Humidity */}
+                <div style={{ width: '100%' }}>
+                    <div className="display-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2em' }}>
+                        <div className="hum-label" style={{ textAlign: 'left', flex: 1 }}>Humidity</div>
+                        <div className="hum-value" style={{ textAlign: 'right', flex: 1 }}>
                             <span style={{ opacity: labelOpacity }}>{rh}</span><span>%</span>
                         </div>
                     </div>
+                    <TimeSeriesChart
+                        data={history}
+                        now={now}
+                        valueKey="humidity"
+                        lineColor="#7fd"
+                        heightRatio={1}
+                    />
                 </div>
                 {error && <div className="error-msg">{error}</div>}
             </div>
