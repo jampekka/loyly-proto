@@ -61,15 +61,13 @@ export function createBleScanSensor(onUpdate) {
                             const decoded = decodeRuuviDF5(dataView);
                             if (decoded) {
                                 const at = apparentTemperature(decoded.temperature, decoded.humidity);
-                                const meta = {
-                                    name: event.device?.name ?? null,
-                                    mac: event.device?.id ?? null
-                                };
                                 const sample = {
+                                    name: event.device?.name ?? null,
+                                    mac: event.device?.id ?? null,
                                     ...decoded,
                                     apparentTemperature: at
                                 };
-                                onUpdate(sample, meta);
+                                onUpdate(sample);
                             }
                         }
                     }
@@ -110,7 +108,14 @@ export function createDebugSensor(onUpdate) {
                 const tau = 2.0, dt = 1.0, alpha = 1 - Math.exp(-dt / tau);
                 fakeTemp += alpha * (trueTemp - fakeTemp);
                 fakeRH += alpha * (trueRH - fakeRH);
-                onUpdate({ temperature: fakeTemp, humidity: fakeRH, apparentTemperature: apparentTemperature(fakeTemp, fakeRH) });
+                onUpdate({
+                    name: "Debug Sensor",
+                    mac: "debug-mac",
+                    ts: Date.now(),
+                    temperature: fakeTemp,
+                    humidity: fakeRH,
+                    apparentTemperature: apparentTemperature(fakeTemp, fakeRH) }
+                );
             }, 1000);
             this.fakeLoyly = fakeLoyly;
         },
@@ -160,15 +165,13 @@ export function createRuuviNusSensor(onUpdate) {
                     const decoded = decodeRuuviDF5(value);
                     if (decoded) {
                         const at = apparentTemperature(decoded.temperature, decoded.humidity);
-                        const meta = {
-                            name: device?.name ?? null,
-                            mac: device?.id ?? null
-                        };
                         const sample = {
+                            name: device?.name ?? null,
+                            mac: device?.id ?? null,
                             ...decoded,
                             apparentTemperature: at
                         };
-                        onUpdate(sample, meta);
+                        onUpdate(sample);
                     }
                 };
                 await nusChar.startNotifications();
