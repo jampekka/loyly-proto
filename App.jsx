@@ -370,7 +370,7 @@ export default function RuuviApp() {
                 </div>
                 {error && <div className="error-msg">{error}</div>}
             </div>
-            <section className="debug-controls" style={{ marginTop: '2.5em', textAlign: 'center' }}>
+            <section className="debug-controls" style={{ textAlign: 'center' }}>
                 <button
                     id="scan"
                     onClick={handleScanClick}

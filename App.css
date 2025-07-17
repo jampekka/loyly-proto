@@ -14,7 +14,7 @@ html, body {
     padding-top: 1em;
 }
 button, input[type=range] {
-    margin-top: 0.5em;
+    margin-top: 0.0em;
 }
 ul#messages {
     margin: 1.5em 0 1.5em 0;
@@ -36,7 +36,7 @@ ul#messages li {
     letter-spacing: 0.05em;
 }
 .loyly-value {
-    font-size: 4.0em;
+    font-size: 3.0em;
     font-family: 'Fira Mono', 'Consolas', monospace;
     font-weight: 600;
     line-height: 1.1;
@@ -57,7 +57,7 @@ ul#messages li {
 .debug-controls {
     border-radius: 0.7em;
     padding: 1.2em 1em 1em 1em;
-    margin-top: 1.5em;
+    /*margin-top: 1.5em;*/
     box-shadow: 0 2px 8px #0004;
 }
 .debug-controls button {
@@ -67,8 +67,8 @@ ul#messages li {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 1.5em;
-    margin-top: 2.5em;
+    gap: 0.2m;
+    margin-top: 1em;
     font-size: 0.98em;
     color: #7fd;
     opacity: 0.85;
@@ -78,4 +78,12 @@ ul#messages li {
     color: #7fd;
     cursor: pointer;
     font-size: 0.98em;
+}
+.display-block {
+  padding-left: 1em;
+  padding-right: 1em;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.2em;
 }
